@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 
 import Image from './models/Image';
 import Page from './models/Page'
-import History from './models/History';
 
 import { Input } from './components/ui/input';
 import { Button } from './components/ui/button';
@@ -21,18 +20,10 @@ function UrlFetcher() {
   const [error, setError] = useState<string | null>(null);
   const [totalImageCount, setTotalImageCount] = useState(0);
   const [searchByDataAttribute, setSearchByDataAttribute] = useState(false);
-  const [historyList, setHistoryList] = useState<History[]>([])
 
-  var [currentImageCount, setCurrentImageCount] = useState(0);
+  const [currentImageCount, setCurrentImageCount] = useState(0);
 
-  React.useEffect(() => {
-    const storedHistory = localStorage.getItem('history');
-    if (storedHistory) {
-      setHistoryList(JSON.parse(storedHistory));
-    } else {
-      setHistoryList([]);
-    }
-  }, []);
+  const [previousSearches] = useState<string[]>([]);
 
   const fetchDocument = async (inputUrl: string) => {
 
@@ -45,7 +36,7 @@ function UrlFetcher() {
 
     // Check if the URL is valid
     if (!validatedUrl) {
-      setError("Invalid URL format.  Please enter a valid URL.  Format should be http://yoursite.com or www.yoursite.com");
+      setError("Invalid URL format, please enter a valid URL.  Format should be http://yoursite.com or www.yoursite.com");
       setLoading(false);
       return;
     }
@@ -55,14 +46,13 @@ function UrlFetcher() {
       const response = await fetch(`/api/proxy?url=${encodeURIComponent(validatedUrl)}`);
 
       if (!response.ok) {
-        const errorText = await response.text();
         console.log(inputUrl)
-        throw new Error(`Failed to load url, page not found. URL format should be http://yoursite.com or www.yoursite.com `);
+        throw new Error(`Failed to load url, page not found. `);
       }
 
       const htmlText = await response.text();
 
-      var page: Page = {
+      const page: Page = {
         title: '',
         url: validatedUrl,
         images: [],
@@ -84,40 +74,20 @@ function UrlFetcher() {
       const linkElements = doc.querySelectorAll('a');
 
       if (imgElements.length > 0) {
-
-        var currentCount = 0
+        let currentCount = 0
         const imageArray = Array.from(imgElements);
 
         for (let i = 0; i < imageArray.length; i++) {
-
-          const img = imageArray[i];
-          var imageSrc = img.getAttribute('src') || '';
-
-          if (searchByDataAttribute)
-            imageSrc = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-fallback-src') || '';
-
-          if (imageSrc) {
-            try {
-              const imageObj = await fetchImageInfo(imageSrc);
-              page.images.push(imageObj);
-            } catch (e) {
-              console.error(`Failed to fetch image ${imageSrc}:`, e);
-            }
-          }
-          else {
-            console.log(imageArray[i], "No src attribute found for image at index ", i);
-            // If no src attribute, add to not found image count
-            page.imagesNotFound++;
-          }
+          const parsedImage = await fetchImageInfo(imageArray[i], searchByDataAttribute);
+          page.images.push(parsedImage);
+          
           setCurrentImageCount(++currentCount);
         }
-
       }
 
       // Extract links from the document
       // Note: This works better inline than from using a helper function
       if (linkElements.length > 0) {
-
         const extractedLinks = Array.from(linkElements).map(link => {
           const href = link.getAttribute('href') || '';
           const isExternal = href.startsWith('http://') || href.startsWith('https://');
@@ -142,33 +112,29 @@ function UrlFetcher() {
         page.internalLinks = extractedLinks.filter(link => !link.isExternal);
         page.externalLinks = extractedLinks.filter(link => link.isExternal);
       }
-
-      const historyItem: History = {
-        pages: [page],
-        date: new Date()
-      };
-      const prevHistory = JSON.parse(localStorage.getItem('history') || '[]') as History[];
-
-      prevHistory.push(historyItem);
-      localStorage.setItem('history', JSON.stringify(prevHistory));
       setPage(page);
 
-    } catch (err: any) {
-      setError(err?.message || "An error occurred");
+      previousSearches.push(validatedUrl);
+
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An error occurred");
+        console.error("An unknown error occurred:", err);
+      }
     }
     setLoading(false);
   };
 
   const handleSubmit = (e: { preventDefault: () => void; }) => {
     e.preventDefault();
-    console.log("Fetching details for URL:", url)
     fetchDocument(url);
   };
 
   return (
     <main className="max-w-4xl mx-auto p-6">
-
-      <h1 className="text-2xl font-bold mb-4">URL Inspector</h1>
+      <h1 className="text-2xl font-bold mb-4">URL Inspector 9000</h1>
       <form onSubmit={handleSubmit} className="flex gap-4 mb-6">
         <Input
           type="text"
@@ -189,8 +155,8 @@ function UrlFetcher() {
 
         </label></form>
 
-      {loading && <p>Analyzing... Loaded {currentImageCount} of {totalImageCount} images</p>}
-      
+      {loading && <p>Analyzing... Loaded {currentImageCount} of {totalImageCount} images<br/></p>}
+
       {error && <p className="text-red-500">{error}</p>}
 
       {page && (
@@ -199,20 +165,17 @@ function UrlFetcher() {
             <h2 className="text-xl text-pink-500 font-bold mb-2">{page.title}</h2>
             {/* Group images by fileType and calculate total size per type */}
             {(() => {
-              const grouped: { [type: string]: { images: Image[]; totalSize: number } } = {};
-              page.images.forEach(img => {
-                const type = img.fileType || "unknown";
-                if (!grouped[type]) {
-                  grouped[type] = { images: [], totalSize: 0 };
+              const groups: { [type: string]: { images: Image[]; totalSize: number } } = {};
+              page.images.forEach(imgType => {
+                const type = imgType.fileType || "unknown";
+                if (!groups[type]) {
+                  groups[type] = { images: [], totalSize: 0 };
                 }
-                grouped[type].images.push(img);
-                grouped[type].totalSize += img.size || 0;
+                groups[type].images.push(imgType);
+                groups[type].totalSize += imgType.size || 0;
               });
-              const fileTypes = Object.keys(grouped);
-              if (page.imagesNotFound > 0) {
-                grouped["not found"] = { images: [], totalSize: 0 };
-                fileTypes.push("not found");
-              }
+              const fileTypes = Object.keys(groups);
+              
               return (
                 <div className="mb-4">
                   <h2 className="text-xl font-semibold mb-2">Images by File Type</h2>
@@ -222,7 +185,7 @@ function UrlFetcher() {
                         <span className="font-bold">{type.toUpperCase()}</span>
                         : {type === "not found"
                           ? `${page.imagesNotFound} image(s) with no src`
-                          : `${grouped[type].images.length} image(s), total size: ${(grouped[type].totalSize / (1024 * 1024)).toFixed(2)} MB`
+                          : `${groups[type].images.length} image(s), total size: ${(groups[type].totalSize / (1024 * 1024)).toFixed(2)} MB`
                         }
                       </li>
                     ))}
@@ -273,56 +236,28 @@ function UrlFetcher() {
           </CardContent>
         </Card>
       )}
-
-      {/* History Section - TODO: move to separate component*/}
-      <div className="mt-8">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold">History</h2>
-              <Button
-                type="button"
-                onClick={() => {
-                  localStorage.removeItem('history');
-                  window.location.reload();
-                }}
-              >
-                Clear History
-              </Button>
-            </div>
-            <ul>
-              {historyList.length === 0 ? (
-                <li className="text-gray-500">No history yet.</li>
-              ) : (
-                historyList.map((history, i) => (
-                  <li key={i} className="mb-4">
-                    <div className="text-gray-600 text-sm mb-1">
-                      {new Date(history.date).toLocaleString()}
-                    </div>
-                    <ul className="ml-4 list-disc">
-                      {history.pages.map((page, i) => (
-                        <li key={i}>
-                          <span className="font-bold">{page.title}</span> — 
-                          <a
-                            type="button"
-                            onClick={() => {
-                              setUrl( page.url);
-                              fetchDocument(page.url)
-                            }}
-                            className="text-pink-600 underline hover:text-blue-800"
-                          >
-                            {page.url}
-                          </a>
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))
-              )}
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+      <h2 className="text-lg font-semibold mt-6 mb-2">Past Searches</h2>
+      {previousSearches.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold mb-2">Previous Searches</h2>
+          <ul>
+            {previousSearches.map((searchUrl, i) => (
+              <li key={i}>
+                <button
+                  type="button"
+                  className="text-blue-600 underline hover:text-blue-800"
+                  onClick={() => {
+                    setUrl(searchUrl);
+                    fetchDocument(searchUrl);
+                  }}
+                >
+                  {searchUrl}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </main>
   );
 }
