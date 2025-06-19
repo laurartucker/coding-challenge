@@ -21,9 +21,7 @@ function UrlFetcher() {
   const [error, setError] = useState<string | null>(null);
   const [totalImageCount, setTotalImageCount] = useState(0);
   const [searchByDataAttribute, setSearchByDataAttribute] = useState(false);
-
   const [currentImageCount, setCurrentImageCount] = useState(0);
-
   const [previousSearches] = useState<string[]>([]);
 
   const fetchDocument = async (inputUrl: string) => {
@@ -195,7 +193,7 @@ function UrlFetcher() {
                           setUrl(link.src);
                           fetchDocument(link.src)
                         }}
-                        className="text-pink-600 underline hover:text-pink-800"
+                        className="text-pink-600 underline hover:text-pink-800 inline-block max-w-xs truncate align-bottom"
                       >
                         {link.label}
                       </a>
@@ -209,13 +207,14 @@ function UrlFetcher() {
                 <ul>
                   {page.externalLinks.map((link, i) => (
                     <li key={i}>
-                     <a
+                      <a
                         type="button"
+                        className="text-pink-600 underline hover:text-pink-800 inline-block max-w-xs truncate align-bottom"
                         onClick={() => {
                           setUrl(link.src);
                           fetchDocument(link.src)
                         }}
-                        className="text-pink-600 underline hover:text-pink-800"
+
                       >
                         {link.label}
                       </a>

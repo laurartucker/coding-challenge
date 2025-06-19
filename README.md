@@ -19,6 +19,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Using Url Inspector 9000
+UI9000 lets you analyze any kind of url and shows you a full breakdown of images and links included on the site.  This fully responsive tool lets you analyze to your heart's content, even allowing you to rerun previous searches <insert sunglasses emoji/>
 
 ### Analyzing a Url
 
@@ -27,6 +28,10 @@ When loading the UI9000 for the first time, you'll see a form with a textbox and
 NOTE: All references to https:// have to be converted to http:// to avoid CORS issues.  This doesn't affect results as most sites support both. 
 
 For the URL supplied, the UI9000 fetches the full DOM and parses out images and links.  
+
+### Progress Counter
+When analyzing a url, UI9000 needs to fetch all image files, and for larger sites or slower connections, this can take a little time. 
+
 
 ### Image Parsing 
 For images, from those referenced in the DOM, UI9000 first fetches the image to get filesize, then groups images by file type. For each group, the image type and the sum of all group file sizes is shown.  
@@ -43,6 +48,8 @@ Additional logic has been added to handle internal links correctly.  The src in 
 
 #### External Links
 Every link listed as an absolute URL will displayed under external links.  When clicked on, UI will analyze said link.  
+
+NOTE: A site might include itself as a link - not just '/', but the full, absolute URL.  Given this link is actually the same as what's being analyzed, an arguement could be made to class this as an internal link.  At this time, if a link is included in its absolute form, it is classed as an external link.
 
 NOTE: External links include mailto: and tel: anchors.  Since they are external links, they are included.  WHen clicked on, they will be analyzed but UI9000 will reject the URL.  
 
