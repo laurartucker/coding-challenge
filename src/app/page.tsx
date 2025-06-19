@@ -1,6 +1,6 @@
 
 "use client";
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 import Image from './models/Image';
 import Page from './models/Page'
@@ -24,6 +24,10 @@ function UrlFetcher() {
   const [currentImageCount, setCurrentImageCount] = useState(0);
   const [previousSearches] = useState<string[]>([]);
 
+  useEffect(() => {
+    document.title = 'UI 9000 - URL Inspector';
+  }, []);
+  
   const fetchDocument = async (inputUrl: string) => {
 
     setLoading(true);
