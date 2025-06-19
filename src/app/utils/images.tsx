@@ -2,41 +2,54 @@ import Image from '../models/Image';
 
 import { validateUrl } from './urls';
 
-export async function fetchImageInfo(imgSrc: string) {
+export async function fetchImageInfo(imageElement: HTMLImageElement, searchByDataAttribute = false): Promise<Image> {
 
-  var image: Image = {
+  const image: Image = {
     id: Date.now(), // Using timestamp as a simple unique ID
     fileType: '',
     size: 0,
     src: ''
   }
+  let imageSrc = imageElement.getAttribute('src') || '';
 
-  try {
-    // Resolve imgSrc relative to baseUrl
-    const validatedUrl = validateUrl(imgSrc);
-    
-    if (!validatedUrl) {
-      throw new Error("Invalid image URL");
-    }
+  if (searchByDataAttribute)
+    imageSrc = imageElement.getAttribute('src') || imageElement.getAttribute('data-src') || imageElement.getAttribute('data-fallback-src') || '';
 
-    image.src = validatedUrl;
+  if (imageSrc) {
+    try {
+      const validatedUrl = validateUrl(imageSrc);
 
-    const res = await fetch(`/api/proxy?url=${validatedUrl}`);
-    
-    if (!res.ok) 
-      throw new Error("Failed to fetch image");
+      if (!validatedUrl) {
+        throw new Error("Invalid image URL");
+      }
 
-    const blob = await res.blob();
-    image.size = blob.size;
+      image.src = validatedUrl;
 
-    // Remove query string and fragment before extracting file extension
-    const urlWithoutParams = validatedUrl.split(/[?#]/)[0];
-    image.fileType = urlWithoutParams.split('.').pop() || 'unknown';
+      const res = await fetch(`/api/proxy?url=${validatedUrl}`);
 
-    } catch (e: unknown) {
+      if (!res.ok)
+        throw new Error("Failed to fetch image");
+
+      const blob = await res.blob();
+      image.size = blob.size;
+
+      // Remove query string and fragment before extracting file extension
+      const urlWithoutParams = validatedUrl.split(/[?#]/)[0];
+      image.fileType = urlWithoutParams.split('.').pop() || 'unknown';
+
+    } catch (e) {
       const error = e as Error;
-      console.error("imgsrc: ", imgSrc, "Error fetching image info:", error.message);
-    throw e;
+      console.log("!!ERROR imgsrc: ", imageSrc, "Error fetching image info:", error.message);
+
+      image.fileType = 'NOT SUPPORTED BY UI9000'
+      return image
+    }
   }
+  else {
+    return image; // Return empty image object if no src attribute found
+    // If no src attribute, add to not found image count
+    //  page.imagesNotFound++;
+  }
+  
   return image;
 }
