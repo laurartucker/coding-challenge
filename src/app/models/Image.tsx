@@ -1,8 +1,9 @@
-  type Image = {
-    label: string;
-    fileType: string;
-    size: number;
-    src: string;
-  }
+type Image = {
+   id: number;
+   label: string;
+   fileType: string;
+   size: number;
+   src: string;
+}
 
-  export default Image;
+export default Image;

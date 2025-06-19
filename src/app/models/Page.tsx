@@ -7,6 +7,7 @@ type Page = {
     images: Image[];
     internalLinks: Link[];
     externalLinks: Link[];
+    totalImageCount: number;
   };
   
   export default Page;
