@@ -5,6 +5,7 @@ type Page = {
     title: string;
     url: string;
     images: Image[];
+    imagesNotFound: number
     internalLinks: Link[];
     externalLinks: Link[];
     totalImageCount: number;

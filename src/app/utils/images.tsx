@@ -6,12 +6,11 @@ export async function fetchImageInfo(imgSrc: string) {
 
   var image: Image = {
     id: Date.now(), // Using timestamp as a simple unique ID
-    label: '',
     fileType: '',
     size: 0,
     src: ''
   }
-  
+
   try {
     // Resolve imgSrc relative to baseUrl
     const validatedUrl = validateUrl(imgSrc);
@@ -36,6 +35,7 @@ export async function fetchImageInfo(imgSrc: string) {
 
     } catch (e: unknown) {
       const error = e as Error;
+      console.error("imgsrc: ", imgSrc, "Error fetching image info:", error.message);
     throw e;
   }
   return image;
