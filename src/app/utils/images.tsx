@@ -39,8 +39,10 @@ export async function fetchImageInfo(imageElement: HTMLImageElement, searchByDat
 
     } catch (e) {
       const error = e as Error;
-      console.error("imgsrc: ", imageSrc, "Error fetching image info:", error.message);
-      throw e;
+      console.log("!!ERROR imgsrc: ", imageSrc, "Error fetching image info:", error.message);
+
+      image.fileType = 'NOT SUPPORTED BY UI9000'
+      return image
     }
   }
   else {
@@ -48,31 +50,6 @@ export async function fetchImageInfo(imageElement: HTMLImageElement, searchByDat
     // If no src attribute, add to not found image count
     //  page.imagesNotFound++;
   }
-  try {
-    const validatedUrl = validateUrl(imageSrc);
-
-    if (!validatedUrl) {
-      throw new Error("Invalid image URL");
-    }
-
-    image.src = validatedUrl;
-
-    const res = await fetch(`/api/proxy?url=${validatedUrl}`);
-
-    if (!res.ok)
-      throw new Error("Failed to fetch image");
-
-    const blob = await res.blob();
-    image.size = blob.size;
-
-    // Remove query string and fragment before extracting file extension
-    const urlWithoutParams = validatedUrl.split(/[?#]/)[0];
-    image.fileType = urlWithoutParams.split('.').pop() || 'unknown';
-
-  } catch (e: unknown) {
-    const error = e as Error;
-    console.error("imgsrc: ", imageSrc, "Error fetching image info:", error.message);
-    throw e;
-  }
+  
   return image;
 }

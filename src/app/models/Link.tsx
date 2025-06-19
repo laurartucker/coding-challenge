@@ -2,7 +2,7 @@ type Link = {
     title: string;
     src: string;
     isExternal: boolean;
-    alt?: string;
+    label?: string;
   }
 
 export default Link;

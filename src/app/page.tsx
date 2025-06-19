@@ -12,6 +12,7 @@ import { CardContent } from './components/ui/card-content';
 
 import { validateUrl } from './utils/urls';
 import { fetchImageInfo } from './utils/images';
+import { extractLinkFromHtml } from './utils/links';
 
 function UrlFetcher() {
   const [url, setUrl] = useState('');
@@ -31,6 +32,7 @@ function UrlFetcher() {
     setError(null);
     setCurrentImageCount(0);
     setTotalImageCount(0);
+    setPage(null);
 
     const validatedUrl = validateUrl(inputUrl);
 
@@ -80,37 +82,24 @@ function UrlFetcher() {
         for (let i = 0; i < imageArray.length; i++) {
           const parsedImage = await fetchImageInfo(imageArray[i], searchByDataAttribute);
           page.images.push(parsedImage);
-          
+
           setCurrentImageCount(++currentCount);
         }
       }
 
       // Extract links from the document
-      // Note: This works better inline than from using a helper function
       if (linkElements.length > 0) {
-        const extractedLinks = Array.from(linkElements).map(link => {
-          const href = link.getAttribute('href') || '';
-          const isExternal = href.startsWith('http://') || href.startsWith('https://');
-          // Extract only the protocol and domain for internal links
-          let baseUrl = '';
-          try {
-            const urlObj = new URL(page.url);
-            baseUrl = `${urlObj.protocol}//${urlObj.host}`;
-          } catch {
-            baseUrl = '';
-          }
-          return {
-            title: link.textContent?.trim() || href,
-            src: isExternal
-              ? href
-              : baseUrl + href, // Use only protocol and domain for internal links
-            isExternal
-          };
-        });
+        for (let j = 0; j < linkElements.length; j++) {
 
-        // Separate internal and external links
-        page.internalLinks = extractedLinks.filter(link => !link.isExternal);
-        page.externalLinks = extractedLinks.filter(link => link.isExternal);
+          const link = extractLinkFromHtml(linkElements[j] as HTMLAnchorElement, page.url);
+
+          if (link.isExternal) {
+            page.externalLinks.push(link);
+          }
+          else {
+            page.internalLinks.push(link);
+          }
+        };
       }
       setPage(page);
 
@@ -155,7 +144,7 @@ function UrlFetcher() {
 
         </label></form>
 
-      {loading && <p>Analyzing... Loaded {currentImageCount} of {totalImageCount} images<br/></p>}
+      {loading && <p>Analyzing... Loaded {currentImageCount} of {totalImageCount} images<br /></p>}
 
       {error && <p className="text-red-500">{error}</p>}
 
@@ -175,7 +164,7 @@ function UrlFetcher() {
                 groups[type].totalSize += imgType.size || 0;
               });
               const fileTypes = Object.keys(groups);
-              
+
               return (
                 <div className="mb-4">
                   <h2 className="text-xl font-semibold mb-2">Images by File Type</h2>
@@ -206,9 +195,9 @@ function UrlFetcher() {
                           setUrl(link.src);
                           fetchDocument(link.src)
                         }}
-                        className="text-blue-600 underline hover:text-blue-800"
+                        className="text-pink-600 underline hover:text-pink-800"
                       >
-                        {link.src}
+                        {link.label}
                       </a>
                     </li>
                   ))}
@@ -220,13 +209,15 @@ function UrlFetcher() {
                 <ul>
                   {page.externalLinks.map((link, i) => (
                     <li key={i}>
-                      <a
-                        href={link.src}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 underline"
+                     <a
+                        type="button"
+                        onClick={() => {
+                          setUrl(link.src);
+                          fetchDocument(link.src)
+                        }}
+                        className="text-pink-600 underline hover:text-pink-800"
                       >
-                        {link.title}
+                        {link.label}
                       </a>
                     </li>
                   ))}
@@ -236,7 +227,6 @@ function UrlFetcher() {
           </CardContent>
         </Card>
       )}
-      <h2 className="text-lg font-semibold mt-6 mb-2">Past Searches</h2>
       {previousSearches.length > 0 && (
         <div className="mt-6">
           <h2 className="text-lg font-semibold mb-2">Previous Searches</h2>
@@ -245,7 +235,7 @@ function UrlFetcher() {
               <li key={i}>
                 <button
                   type="button"
-                  className="text-blue-600 underline hover:text-blue-800"
+                  className="text-pink-600 underline hover:text-pink-800"
                   onClick={() => {
                     setUrl(searchUrl);
                     fetchDocument(searchUrl);

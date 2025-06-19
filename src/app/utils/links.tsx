@@ -1,25 +1,25 @@
-// import Page from "../models/Page";
 
-// export function extractLinksFromHtml(fullList: NodeListOf<HTMLAnchorElement>, page: Page) {
+export function extractLinkFromHtml(element: HTMLAnchorElement, initialUrl: string = '') {
 
-//    if (fullList.length > 0) {
-//       // Flatten the NodeListOf<HTMLAnchorElement>[] into a single array of HTMLAnchorElement
-//       const allLinks = fullList.flatMap(nodeList => Array.from(nodeList));
+   const label = element.getAttribute('href')
 
-//       const extractedLinks = allLinks.map(link => {
-//          const href = link.getAttribute('href') || '';
-//          const isExternal = href.startsWith('http://') || href.startsWith('https://');
-//          console.log("Extracted link:", href, "isExternal:", isExternal);
-//          return {
-//             title: link.textContent?.trim() || href,
-//             src: href,
-//             isExternal
-//          };
-//       });
+   const href = element.getAttribute('href') || '';
+   const isExternal = href.startsWith('http://') || href.startsWith('https://');
 
-//       // Separate internal and external links
-//       page.internalLinks = extractedLinks.filter(link => !link.isExternal);
-//       page.externalLinks = extractedLinks.filter(link => link.isExternal);
-//    }
-
-// }
+   // Extract only the protocol and domain for internal links
+   let baseUrl = '';
+   try {
+      const urlObj = new URL(initialUrl);
+      baseUrl = `${urlObj.protocol}//${urlObj.host}`;
+   } catch {
+      baseUrl = '';
+   }
+   return {
+      title: element.textContent?.trim() || href,
+      label: label || '',
+      src: isExternal
+         ? href
+         : baseUrl + href, // Use only protocol and domain for internal links
+      isExternal
+   };
+}
