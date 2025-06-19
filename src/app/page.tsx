@@ -2,6 +2,11 @@
 "use client";
 import React, { useState } from 'react';
 
+import Image from './models/Image';
+import Link from './models/Link';
+import Page from './models/page'
+import History from './models/History';
+  
 // components/ui/input.tsx
 export function Input(props: React.JSX.IntrinsicAttributes & React.ClassAttributes<HTMLInputElement> & React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className="border px-3 py-2 rounded w-full" />;
@@ -28,9 +33,21 @@ function validateUrl(input: string): string | null {
   try {
     // If input doesn't have a protocol, add http:// by default
     let url = input.trim();
-    if (!/^https?:\/\//i.test(url)) {
+
+    // Check if input starts with https://.  Because of CORS issues, we replace https with http
+    if (/^https:\/\//i.test(url)) {
+      url = url.replace(/^https:\/\//i, "http://");
+    }
+
+    // Check if input is in the format http://example.com 
+    if (!/^http?:\/\//i.test(url)) {
       url = "http://" + url;
     }
+    // Check if input is in the format www.example.com or example.com (no protocol)
+    else if (/^([a-z0-9-]+\.)+[a-z]{2,}(\/.*)?$/i.test(input)) {
+      url = "http://" + input.trim();
+    }
+
     const parsed = new URL(url);
     return parsed.href;
   } catch {
@@ -42,16 +59,42 @@ export function CardContent({ children, className = "" }: { children: React.Reac
   return <div className={`p-4 text-black ${className}`}>{children}</div>;
 }
 
-async function fetchImage(baseUrl: string, imgSrc: string) {
+async function fetchImageInfo(imgSrc: string) {
+  var image: Image = {
+    label: '',
+    fileType: '',
+    size: 0,
+    src: ''
+  }
   try {
     // Resolve imgSrc relative to baseUrl
-    const resolvedUrl = new URL(imgSrc, baseUrl).href;
-    const res = await fetch(`/api/proxy?url=${encodeURIComponent(resolvedUrl)}`);
-    if (!res.ok) throw new Error("Failed to fetch image");
-    return res;
-  } catch (e) {
+    const validatedUrl = validateUrl(imgSrc);
+    
+    if (!validatedUrl) {
+      throw new Error("Invalid image URL");
+    }
+
+    image.src = validatedUrl;
+
+    const res = await fetch(`/api/proxy?url=${validatedUrl}`);
+    
+    if (!res.ok) 
+      throw new Error("Failed to fetch image");
+
+    const blob = await res.blob();
+    image.size = blob.size;
+    console.log("Image size:", image.size);
+
+    // Remove query string and fragment before extracting file extension
+    const urlWithoutParams = validatedUrl.split(/[?#]/)[0];
+    image.fileType = urlWithoutParams.split('.').pop() || 'unknown';
+    console.log("Image fetched:", image);
+
+    } catch (e: unknown) {
+      const error = e as Error;
     throw e;
   }
+  return image;
 }
 
 function UrlFetcher() {
@@ -63,50 +106,35 @@ function UrlFetcher() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  type Image = {
-    label: string;
-    fileType: string;
-    size: number;
-    src: string;
-  }
-
-  type Link = {
-    title: string;
-    src: string;
-    isExternal: boolean;
-  }
-
-  type Page = {
-    title: string;
-    url: string;
-    images: Image[];
-    internalLinks: Link[];
-    externalLinks: Link[];
+  const historyItem: History = {
+    pages: [],
+    date: new Date()
   };
 
   const fetchDocument = async (inputUrl: string) => {
+
     setLoading(true);
     setError(null);
     setContent(null); // Clear previous content
     setPage(null); // Clear previous page details
 
     const validatedUrl = validateUrl(inputUrl);
+    console.log("Validated URL:", validatedUrl);
 
     // Check if the URL is valid
     if (!validatedUrl) {
-      setError("Invalid URL format");
+      setError("Invalid URL format.  Please enter a valid URL.  Format should be http://yoursite.com or www.yoursite.com");
       setLoading(false);
       return;
     }
 
     try {
       // Proxy the request through API route to avoid CORS issues
-
       const response = await fetch(`/api/proxy?url=${encodeURIComponent(validatedUrl)}`);
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to fetch details: ${response.status} ${errorText}`);
+        throw new Error(`Failed to load url, page not found. URL format should be http://yoursite.com or www.yoursite.com `);
       }
 
       const htmlText = await response.text();
@@ -126,39 +154,59 @@ function UrlFetcher() {
       page.title = doc.querySelector('title')?.textContent || 'No title found';
 
       const imgElements = doc.querySelectorAll('img');
+      const linkElements = doc.querySelectorAll('a');
+    
+      if (linkElements.length > 0) {
+        const extractedLinks = Array.from(linkElements).map(link => {
+          const href = link.getAttribute('href') || '';
+          const isExternal = href.startsWith('http://') || href.startsWith('https://');
+          console.log("Extracted link:", href, "isExternal:", isExternal);
+          return {
+            title: link.textContent?.trim() || href,
+            src: href,
+            isExternal
+          };
+        });
+
+        // Separate internal and external links
+        page.internalLinks = extractedLinks.filter(link => !link.isExternal);
+        page.externalLinks = extractedLinks.filter(link => link.isExternal);
+      }
+
 
       if (imgElements.length > 0) {
-        const extractedImages = Array.from(imgElements).map(img => img);
+        for (const img of Array.from(imgElements)) {
+          const imageSrc = img.getAttribute('src') || '';
+          const label = img.getAttribute('alt') || imageSrc;
 
-        extractedImages.forEach(async (img, index) => {
+          if (imageSrc) {
+            try {
+              const imageObj = await fetchImageInfo(imageSrc);
+              imageObj.label = label;
+              imageObj.fileType = imageObj.fileType || img.getAttribute('type') || '';
+              imageObj.size = imageObj.size || 0;
+              imageObj.label = label;
 
-          var image: Image = {
-            label: `${img.title}`,
-            fileType: '',
-            size: 0,
-            src: `${img.src}`
-          };
-
-          if (img.src) {
-            const validatedImgSrc = validateUrl(img.src);
-            if (validatedImgSrc) {
-              try {
-                const imageRes = await fetchImage(url, validatedImgSrc);
-                const imgBlob = await imageRes.blob();
-                image.size = imgBlob.size;
-                image.fileType = imgBlob.type;
-              } catch (e) {
-                image.size = -1; // Indicate error in fetching image
-                image.fileType = 'Image not found';
-              }
-            } else {
-              image.size = -1;
-              image.fileType = 'Invalid image URL';
+              page.images.push(imageObj);
+            } catch (e) {
+              // Optionally handle image fetch errors
+              page.images.push({
+                label,
+                fileType: '',
+                size: 0,
+                src: imageSrc
+              });
             }
           }
-          page.images.push(image);
-        });
-        console.log("Page extracted:", page);
+        }
+        const historyItem: History = {
+          pages: [page],
+          date: new Date()
+        };
+        const prevHistory = JSON.parse(localStorage.getItem('history') || '[]') as History[];
+
+        prevHistory.push(historyItem);
+        localStorage.setItem('history', JSON.stringify(prevHistory));
         setPage(page);
       }
 
@@ -177,6 +225,7 @@ function UrlFetcher() {
 
   return (
     <main className="max-w-4xl mx-auto p-6">
+      
       <h1 className="text-2xl font-bold mb-4">URL Inspector</h1>
       <form onSubmit={handleSubmit} className="flex gap-4 mb-6">
         <Input
@@ -190,50 +239,78 @@ function UrlFetcher() {
       </form>
 
       {loading && <p>Analyzing...</p>}
-      {error && <p className="text-red-500">Error: {error}</p>}
+      {error && <p className="text-red-500">{error}</p>}
 
       {page && (
         <Card>
           <CardContent className="p-4">
             <h2 className="text-xl font-semibold mb-2">Page: {page.title}</h2>
-            <ul>
-              {page.images.map((img, i) => (
-                <li key={i} className="mb-2">
-                  <div>
-                    <span className="font-semibold">{img.label || img.src}</span>
-                    <div className="text-sm">
-                      Type: {img.fileType || "unknown"}, Size: {img.size >= 0 ? `${img.size} bytes` : "N/A"}
-                    </div>
-                    <div>
-                      <a href={img.src} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-                        View Image
+            {/* Group images by fileType and calculate total size per type */}
+            {(() => {
+              const grouped: { [type: string]: { images: Image[]; totalSize: number } } = {};
+              page.images.forEach(img => {
+                const type = img.fileType || "unknown";
+                if (!grouped[type]) {
+                  grouped[type] = { images: [], totalSize: 0 };
+                }
+                grouped[type].images.push(img);
+                grouped[type].totalSize += img.size || 0;
+              });
+              const fileTypes = Object.keys(grouped);
+              return (
+                <div className="mb-4">
+                  <h2 className="text-xl font-semibold mb-2">Images by File Type</h2>
+                  <ul>
+                    {fileTypes.map(type => (
+                      <li key={type} className="mb-2">
+                        <span className="font-bold">{type.toUpperCase()}</span>
+                        — {grouped[type].images.length} image(s), total size: {(grouped[type].totalSize / (1024 * 1024)).toFixed(2)} MB
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
+            <div className="flex flex-col md:flex-row gap-8 mt-4">
+              {/* Internal Links */}
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold mb-2">Internal Links</h2>
+                <ul>
+                  {page.internalLinks.map((link, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUrl(url + link.src);
+                          fetchDocument(url + link.src)
+                        }}
+                        className="text-blue-600 underline hover:text-blue-800"
+                      >
+                        {link.title}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              {/* External Links */}
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold mb-2">External Links</h2>
+                <ul>
+                  {page.externalLinks.map((link, i) => (
+                    <li key={i}>
+                      <a
+                        href={link.src}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        {link.title}
                       </a>
-                    </div>
-                  </div>
-                </li>
-              ))}</ul>
-
-            <h2 className="text-xl font-semibold mt-4 mb-2">Internal Links</h2>
-            <ul>
-              {page.internalLinks.map((link, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    onClick={() => fetchDocument(link.title)}
-                    className="text-blue-600 underline hover:text-blue-800"
-                  >
-                    {link.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <h2 className="text-xl font-semibold mt-4 mb-2">External Links</h2>
-            <ul>
-              {page.externalLinks.map((link, i) => (
-                <li key={i}><a href={link.src} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{link.title}</a></li>
-              ))}
-            </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}
